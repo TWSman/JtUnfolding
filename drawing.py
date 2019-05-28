@@ -11,18 +11,23 @@ from rootpy.plotting import Hist,Hist2D
 import rootpy.plotting.root2matplotlib as rplt
 import matplotlib.pyplot as plt
 
-def drawJetPt(hMeas,hTrue,hReco): 
+def drawJetPt(hMeas,hTrue,hReco,filename='JetPt'): 
+  if(hTrue is None):
+    divider = hMeas
+  else:
+    divider = hTrue
+    hTrue.SetMarkerColor('red')
+
   hMeas.SetMarkerColor('blue')
-  hTrue.SetMarkerColor('red')
   hReco.SetMarkerColor(3)
   ratioMeas = hMeas.Clone()
-  ratioMeas.Divide(hTrue)
+  ratioMeas.Divide(divider)
   ratioReco = hReco.Clone()
-  ratioReco.Divide(hTrue)
+  ratioReco.Divide(divider)
   
   fig, axs = plt.subplots(2,1,figsize=(5,8),sharey=False,sharex=True)
   axs = axs.reshape(2)
-  axs[0].text(15,1,r'pPb $\sqrt{s_{NN}} = 5.02 \mathrm{TeV}$' '\n Full jets\n' r'Anti-$k_T$, R=0.4',fontsize=7)
+  axs[0].text(45,1e-2,r'pPb $\sqrt{s_{NN}} = 5.02 \mathrm{TeV}$' '\n Full jets\n' r'Anti-$k_T$, R=0.4',fontsize=7)
   axs[0].set_ylabel(r'$\frac{dN}{dp_{T}}$',fontsize=18)
   axs[0].set_xlabel(r'$p_{T}$',fontsize = 18)
   axs[1].set_xlabel(r'$p_{T}$',fontsize = 18)
@@ -36,8 +41,11 @@ def drawJetPt(hMeas,hTrue,hReco):
   
   rplt.errorbar(hMeas,xerr=False,emptybins=False,axes=ax,label='Measured',fmt='go') #Plot measured pT
   rplt.errorbar(hReco,xerr=False,emptybins=False,axes=ax,label='Unfolded',fmt='go') #Plot unfolded pT
-  rplt.errorbar(hTrue,xerr=False,emptybins=False,axes=ax,label='True',fmt='go') #Plot True pT
-
+  if(hTrue is not None):
+    rplt.errorbar(hTrue,xerr=False,emptybins=False,axes=ax,label='True',fmt='go') #Plot True pT
+  
+  maxContent = hMeas.GetBinContent(hMeas.GetMaximumBin())
+  ax.set_ylim([3e-10*maxContent,10*maxContent])
   ax.legend(loc ='lower left')
   ax.yaxis.set_ticks_position('both') #Show ticks on left and right side
   ax.xaxis.set_ticks_position('both')  #Show ticks on bottom and top
@@ -61,7 +69,7 @@ def drawJetPt(hMeas,hTrue,hReco):
 
   plt.tight_layout()
   plt.subplots_adjust(wspace =0,hspace=0) #Set space between subfigures to 0
-  #plt.savefig('PythonFigures/JetPtComparison.pdf',format='pdf') #Save figure
+  plt.savefig(filename,format='pdf') #Save figure
   plt.show() #Draw figure on screen
 
 def draw2D(hist,title):
@@ -133,6 +141,16 @@ def drawResponse(ax,hist):
   #ax.set_xscale('log')
   #ax.set_yscale('log')
 
+def drawPtResponse(ax,hist,filename=""):
+  ax.set_xlabel(r'$p_{T,obs}\left[GeV\right]$') #Add x-axis labels for bottom row
+  ax.set_ylabel(r'$p_{T,true}\left[GeV\right]$') #Add x-axis labels for bottom row
+  #rplt.hist2d(hist, label = "Hist",norm=LogNorm(),colorbar=True)
+  rplt.hist2d(hist, label = "Hist",norm=LogNorm())
+  ax.set_xlim([5,150])
+  ax.set_ylim([5,150])
+  #ax.set_xscale('log')
+  #ax.set_yscale('log')
+    
 
 def drawJtRatio(ax,hJtMeas,hJtTrue,hJtFake,hRecoBayes,hRecoSVD,hReco2D):
 
@@ -348,7 +366,7 @@ def draw8grid(measJt,trueJt,jetPt,xlog = True,ylog = True,name="newfile.pdf",pro
   plt.savefig(name,format='pdf') #Save figure
   plt.show() #Draw figure on screen
 
-def draw8gridcomparison(measJt,trueJt,jetPt,xlog = True,ylog = True,name="newfile.pdf",proj=None,unf2d = None, unf=None,fake=None, unf2dtest=None, **kwargs):
+def draw8gridcomparison(measJt,trueJt,jetPt,xlog = True,ylog = True,name="newfile.pdf",proj=None,unf2d = None, unf=None,fake=None, unf2dtest=None,leadingJt=None, **kwargs):
   """Create an 4 by 2 grid of subfigures with shared axes and plots jT with background in jet pT bins
   Args:
     measJt: List of jT histograms
@@ -377,11 +395,15 @@ def draw8gridcomparison(measJt,trueJt,jetPt,xlog = True,ylog = True,name="newfil
   for ax in [axs[3],axs[7]]: 
     ax.yaxis.set_label_position('right') #Set the y-axis label position to right hand side for the rightmost subfigures
 
+  if(trueJt):
+    divider = trueJt
+  else:
+    divider = measJt
   ratios = []
-  for hists in (measJt,proj,unf2d,unf2dtest,unf,fake):
+  for hists in (measJt,proj,unf2d,unf2dtest,unf,fake,leadingJt):
       if hists is not None:
           ratio = []
-          for h,true in zip(hists,trueJt):
+          for h,true in zip(hists,divider):
               h2 = h.Clone()
               h2.Divide(true)
               ratio.append(h2)
@@ -389,16 +411,17 @@ def draw8gridcomparison(measJt,trueJt,jetPt,xlog = True,ylog = True,name="newfil
           ratio = None
       ratios.append(ratio)
 
-  for (jT,true,ax,i,pT) in zip (measJt[start::stride],trueJt[start::stride],axs[0:4],range(start,8,stride),jetPt[start::stride]): 
+  for (jT,ax,i,pT) in zip (measJt[start::stride],axs[0:4],range(start,8,stride),jetPt[start::stride]): 
     if(xlog):
       ax.set_xscale('log') #Set logarithmic scale
     if(ylog):
       ax.set_yscale('log')
     jT.SetMarkerColor('blue')
-    true.SetMarkerColor('red')
-    rplt.errorbar(jT,xerr=False,emptybins=False,axes=ax,label='Measured jT',fmt='+')
-    rplt.errorbar(true,xerr=False,emptybins=False,axes=ax,label='True jT',fmt='go') 
-    for h,color,title in zip((proj,unf2d,unf2dtest,unf,fake),(1,3,8,6,7),("Projected Meas","2D unfolded","2D unfolded test","1D unfolded","Fakes")):
+    #true.SetMarkerColor('red')
+    if(leadingJt is None):
+      rplt.errorbar(jT,xerr=False,emptybins=False,axes=ax,label='Measured jT',fmt='+')
+    #rplt.errorbar(true,xerr=False,emptybins=False,axes=ax,label='True jT',fmt='go') 
+    for h,color,title in zip((trueJt,proj,unf2d,unf2dtest,unf,fake,leadingJt),('red',1,3,8,6,7,9),("True jT","Projected Meas","2D unfolded","2D unfolded test","1D unfolded","Fakes","Leading ref.")):
         if h is not None:
             h[i].SetMarkerColor(color)
             rplt.errorbar(h[i],xerr=False,emptybins=False,axes=ax,label=title,fmt='go')
@@ -409,19 +432,30 @@ def draw8gridcomparison(measJt,trueJt,jetPt,xlog = True,ylog = True,name="newfil
     ax.xaxis.set_major_locator(MaxNLocator(prune='both'))
     ax.tick_params(which='both',direction='in') #Move ticks from outside to inside
     ax.text(0.3,1e2,r'$p_{{T,\mathrm{{jet}}}}$:''\n'r' {:02d}-{:02d} GeV'.format(pT[0],pT[1])) 
-    ax.set_xlim([0.01,5]) #Set x-axis limits
-    ax.set_ylim([5e-4,2e4]) #Set y-axis limits
+    if(leadingJt is None):
+      ax.set_xlim([0.01,5]) #Set x-axis limits
+    else:
+      ax.set_xlim([0.01,20]) #Set x-axis limits
+    maxContent = measJt[start].GetBinContent(measJt[start].GetMaximumBin())
+    
+    #ax.set_ylim([5e-4,2e4]) #Set y-axis limits
+    ax.set_ylim([5e-8*maxContent,5*maxContent]) #Set y-axis limits
     ax.grid(True) #Draw grid 
   
-  for ratio,color,title in zip(ratios,('blue',1,3,8,6,7),("Measured","Projected Meas","2D unfolded","2D unfolded test","1D unfolded","Fakes")):
+  for ratio,color,title in zip(ratios,('blue',1,3,8,6,7,9),("Measured","Projected Meas","2D unfolded","2D unfolded test","1D unfolded","Fakes","Leading ref.")):
     if ratio is not None:
       for r,ax,i in zip(ratio[start::stride],axs[4:8],range(start,8,stride),):
         if(xlog):
           ax.set_xscale('log')
         r.SetMarkerColor(color)
-        rplt.errorbar(r,xerr=False,emptybins=False,axes=ax,label=title,fmt='go')
-        ax.set_xlim([0.01,5]) #Set x-axis limits
-        ax.set_ylim([0,2]) #Set y-axis limits
+        if(leadingJt is None or title != "Measured"):
+          rplt.errorbar(r,xerr=False,emptybins=False,axes=ax,label=title,fmt='go')
+        if(leadingJt is None):
+          ax.set_xlim([0.01,5]) #Set x-axis limits
+          ax.set_ylim([0,2]) #Set y-axis limits
+        else:
+          ax.set_xlim([0.01,20]) #Set x-axis limits
+          ax.set_ylim([0,2]) #Set y-axis limits
         ax.grid(True)
       
   plt.tight_layout()
