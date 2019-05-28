@@ -32,16 +32,11 @@ class JtUnfolder(object):
     self._NBINS=kwargs.get('NBINS',64)
     self._responseJetPt = None
     self._responseJetPtCoarse = None
+    self._IsData = kwargs.get('Data',False) 
+    self._hJtTrue2D = None
+    self._Niter = kwargs.get('Iterations',4)
 
-  def plotResponse(self):
-    fig,axs = plt.subplots(2,1,figsize=(10,10))
-    axs = axs.reshape(2)
-    for ax,h in zip(axs,(self._responseJetPt,self._response2D)):
-      hResponse = h.Hresponse()
-      xbins = [hResponse.GetXaxis().GetBinLowEdge(iBin) for iBin in range(1,hResponse.GetNbinsX()+2)]
-      ybins = [hResponse.GetYaxis().GetBinLowEdge(iBin) for iBin in range(1,hResponse.GetNbinsY()+2)]
-      drawing.drawResponse(ax,make2DHist(hResponse,xbins=xbins,ybins=ybins))
-    plt.show() #Draw figure on screen
+
 
     
   def setTrackMatch(self,hists):
@@ -62,6 +57,12 @@ class JtUnfolder(object):
   def setRandomSeed(self,seed):
     self._randomSeed = seed
         
+  def setJtTestMeas2D(self,hJtMeas):
+    self._hJtTestMeas2D = hJtMeas
+
+  def setJtTestTrue2D(self,hJtTrue):
+    self._hJtTestTrue2D = hJtTrue
+
   def setJtMeas2D(self,hJtMeas):
     self._hJtMeas2D = hJtMeas
   
@@ -107,8 +108,14 @@ class JtUnfolder(object):
   def setNumberJetsMeas(self,n):
     self._numberJetsMeasBin = n
   
+  def setNumberJetsTestMeas(self,n):
+    self._numberJetsTestMeasBin = n
+
   def setNumberJetsTrue(self,n):
     self._numberJetsTrueBin = n
+
+  def setNumberJetsTestTrue(self,n):
+    self._numberJetsTestTrueBin = n
     
   def setNumberJetsMeasTrain(self,n):
     self._numberJetsMeasTrain = n
@@ -150,6 +157,10 @@ class JtUnfolder(object):
     self._hJtTrue2D = Hist2D(self._LogBinsJt,self._jetBinBorders)
     self._hJtMeas2D = Hist2D(self._LogBinsJt,self._jetBinBorders)
     self._hJtFake2D = Hist2D(self._LogBinsJt,self._jetBinBorders)
+    
+    #Histogram to store jT with respect to the leading hadron
+    self._hJtTestMeas2D = Hist2D(self._LogBinsJt,self._jetBinBorders) #Needs a better name
+    self._hJtTestTrue2D = Hist2D(self._LogBinsJt,self._jetBinBorders) #Needs a better name
 
     self._responseJetPt = RooUnfoldResponse(self._hJetPtMeas,self._hJetPtTrue)
     self._responseJetPtCoarse = RooUnfoldResponse(self._hJetPtMeasCoarse,self._hJetPtTrueCoarse)
@@ -166,10 +177,12 @@ class JtUnfolder(object):
 
     self._numberJetsMeasBin = [0 for i in self._jetBinBorders]
     self._numberJetsTrueBin = [0 for i in self._jetBinBorders]
+    self._numberJetsTestMeasBin = [0 for i in self._jetBinBorders]
+    self._numberJetsTestTrueBin = [0 for i in self._jetBinBorders]
     self._numberFakesBin = [0 for i in self._jetBinBorders]
     ieout = numberEvents/10
-    if(ieout > 10000):
-      ieout = 10000
+    if(ieout > 20000):
+      ieout = 20000
     start_time = datetime.now()
     print("Processing MC Training Events")
     for ievt in range(numberEvents):
@@ -268,8 +281,8 @@ class JtUnfolder(object):
     start_time = datetime.now()
     numberEvents = numberEvents
     ieout = numberEvents/10
-    if(ieout > 10000):
-      ieout = 10000
+    if(ieout > 20000):
+      ieout = 20000
     for ievt in range(numberEvents):
       tracksTrue = []
       tracksMeas = [0 for x in range(100)]
@@ -285,6 +298,8 @@ class JtUnfolder(object):
           continue
       nt = 0
       nt_meas = 0
+      leading = None
+      leadingPt = 0
       while remainder > 0:
           trackPt = self._hZIn.GetRandom()*jetPt
           if trackPt < remainder:
@@ -295,6 +310,9 @@ class JtUnfolder(object):
               remainder = -1
           if(trackPt > 0.15):
               track.SetPtEtaPhi(trackPt,self._myRandom.Gaus(0,0.1),self._myRandom.Gaus(math.pi,0.2))
+              if track.Pt() > leadingPt:
+                leading = track
+                leadingPt = leading.Pt()
               tracksTrue.append(track)
               jetTrue += track
               if self._fEff.Eval(trackPt) > self._myRandom.Uniform(0,1):
@@ -305,6 +323,10 @@ class JtUnfolder(object):
                   tracksMeas[nt] = 0
               nt +=1
       fakes = []
+      if(leadingPt > 0.25*jetPt):
+        doLeading = True
+      else:
+        doLeading = False
       for it in range(self._fakeRate*100):
         if(self._myRandom.Uniform(0,1) > 0.99):
           fake = TVector3()
@@ -322,38 +344,56 @@ class JtUnfolder(object):
       if ij_meas >= 0:
         self._numberJetsMeasBin[ij_meas] += 1
         self._hJetPtMeasCoarse.Fill(jetMeas.Pt())
+        if(doLeading):
+          self._numberJetsTestMeasBin[ij_meas] += 1          
       if ij_true >= 0:
         self._numberJetsTrueBin[ij_true] += 1
         self._hJetPtTrueCoarse.Fill(jetTrue.Pt())
+        if(doLeading):
+          self._numberJetsTestTrueBin[ij_true] += 1
       for track,it in zip(tracksTrue,range(100)):
         zTrue = (track*jetTrue.Unit())/jetTrue.Mag()
         jtTrue = (track - scaleJet(jetTrue,zTrue)).Mag()
         self._hZTrue.Fill(zTrue)
+        if(track.Pt() < 0.95*leadingPt and doLeading):
+          zLeadingTrue = (track*leading.Unit())/leading.Mag()
+          jtLeadingTrue = (track - scaleJet(leading,zLeadingTrue)).Mag()
         if ij_true >= 0:
           if self._weight:
             self._hJtTrue2D.Fill(jtTrue,jetTrue.Pt(),1.0/jtTrue)
+            if((track.Pt() < 0.95*leading.Pt()) and doLeading): self._hJtTestTrue2D.Fill(jtLeadingTrue,jetTrue.Pt(),1.0/jtLeadingTrue)
           else:
             self._hJtTrue2D.Fill(jtTrue,jetTrue.Pt())
+            if(track.Pt() < 0.95*leading.Pt() and doLeading): self._hJtTestTrue2D.Fill(jtLeadingTrue,jetTrue.Pt())
         if ij_meas >= 0:
           if tracksMeas[it] == 1:
             zMeas= (track*jetMeas.Unit())/jetMeas.Mag()
             jtMeas = (track - scaleJet(jetMeas,zMeas)).Mag()
+            if(track.Pt() < 0.95*leading.Pt()):
+              zLeadingMeas = (track*leading.Unit())/leading.Mag()
+              jtLeadingMeas = (track - scaleJet(leading,zLeadingMeas)).Mag()
             self._hZMeas.Fill(zMeas)
             if self._weight:
               self._hJtMeas2D.Fill(jtMeas,jetMeas.Pt(),1.0/jtMeas)
+              if(track.Pt() < 0.95*leadingPt and doLeading): self._hJtTestMeas2D.Fill(jtLeadingMeas,jetMeas.Pt(),1.0/jtLeadingMeas)
             else: 
               self._hJtMeas2D.Fill(jtMeas,jetMeas.Pt())
+              if(track.Pt() < 0.95*leadingPt and doLeading): self._hJtTestMeas2D.Fill(jtLeadingMeas,jetMeas.Pt())
       if ij_meas >= 0:
         for fake in fakes:
           zFake = (fake*jetMeas.Unit())/jetMeas.Mag()
           jtFake = (fake-scaleJet(jetMeas,zFake)).Mag()
+          zLeadingFake = (fake*leading.Unit())/leading.Mag()
+          jtLeadingFake = (fake - scaleJet(leading,zLeadingFake)).Mag()
           self._hZMeas.Fill(zFake)
           self._hZFake.Fill(zFake)
           if self._weight:
             self._hJtMeas2D.Fill(jtFake,jetMeas.Pt(),1.0/jtFake)
+            self._hJtTestMeas2D.Fill(jtLeadingFake,leadingPt,1.0/jtLeadingFake)
             #self._hJtFake2D.Fill(jtFake,jetMeas.Pt(),1.0/jtFake)
           else:
             self._hJtMeas2D.Fill(jtFake,jetMeas.Pt())
+            self._hJtTestMeas2D.Fill(jtLeadingFake,leadingPt)
             #self._hJtFake2D.Fill(jtFake,jetMeas.Pt())
             
     time_elapsed = datetime.now() - start_time
@@ -364,8 +404,10 @@ class JtUnfolder(object):
       fakes = self._hJtFake2D
     else:
       fakes = None
-    self._response2D = make2Dresponse(self._2Dresponses, self._jetPtBins, self._hJtMeas2D,self._hJtTrue2D,misses = self._misses2D, fakes = fakes)
-    
+    if(self._hJtTrue2D):
+      self._response2D = make2Dresponse(self._2Dresponses, self._jetPtBins, self._hJtMeas2D,self._hJtTrue2D,misses = self._misses2D, fakes = fakes)
+    else: 
+      self._response2D = make2Dresponse(self._2Dresponses, self._jetPtBins, self._hJtMeas2D,self._hJtMeas2D,misses = self._misses2D, fakes = fakes)
     if not self._fillFakes:
       print("Scale hJtFake2D by {}".format(1.0*sum(self._numberJetsMeasBin)/self._numberJetsMeasTrain))
       self._hJtFake2D.Scale(1.0*sum(self._numberJetsMeasBin)/self._numberJetsMeasTrain)
@@ -385,45 +427,106 @@ class JtUnfolder(object):
     self._hJetPtReco = unfoldJetPt(self._hJetPtMeas,self._responseJetPt,self._LogBinsX)
 
     self._numberJetsMeasFromHist = [self._hJetPtMeasCoarse.GetBinContent(i) for i in range(1,self._hJetPtMeasCoarse.GetNbinsX()+1)]
-    self._numberJetsTrueFromHist = [self._hJetPtTrueCoarse.GetBinContent(i) for i in range(1,self._hJetPtTrueCoarse.GetNbinsX()+1)]
+    if(not self._IsData):
+      self._numberJetsTrueFromHist = [self._hJetPtTrueCoarse.GetBinContent(i) for i in range(1,self._hJetPtTrueCoarse.GetNbinsX()+1)]
     self._numberJetsFromReco = [self._hJetPtRecoCoarse.GetBinContent(i) for i in range(1,self._hJetPtRecoCoarse.GetNbinsX())]
     self.printJetNumbers()
     
-    unfold2D = RooUnfoldBayes (self._response2D,self._hJtMeas2D,4)
+    unfold2D = RooUnfoldBayes (self._response2D,self._hJtMeas2D,self._Niter)
     self._hJtReco2D = make2DHist(unfold2D.Hreco(),xbins=self._LogBinsJt,ybins=self._jetBinBorders)
     self._hJtMeasBin = [makeHist(self._hJtMeas2D.ProjectionX("histMeas{}".format(i), i,i),bins= self._LogBinsJt) for i in range(1,len(self._jetBinBorders))]
-    self._hJtTrueBin = [makeHist(self._hJtTrue2D.ProjectionX("histMeas{}".format(i), i,i),bins= self._LogBinsJt) for i in range(1,len(self._jetBinBorders))]
+    self._hJtTestMeasBin = [makeHist(self._hJtTestMeas2D.ProjectionX("histTestMeas{}".format(i),i,i), bins=self._LogBinsJt) for i in range(1,len(self._jetBinBorders))]
+    if(not self._IsData):
+      self._hJtTrueBin = [makeHist(self._hJtTrue2D.ProjectionX("histMeas{}".format(i), i,i),bins= self._LogBinsJt) for i in range(1,len(self._jetBinBorders))]
+      self._hJtTestTrueBin = [makeHist(self._hJtTestTrue2D.ProjectionX("histMeas{}".format(i), i,i),bins= self._LogBinsJt) for i in range(1,len(self._jetBinBorders))]
     self._hJtRecoBin = [makeHist(self._hJtReco2D.ProjectionX("histMeas{}".format(i), i,i),bins= self._LogBinsJt) for i in range(1,len(self._jetBinBorders))]
-    for h,n in zip(self._hJtMeasBin,self._numberJetsMeasFromHist):
+    for h,h2,n,n2 in zip(self._hJtMeasBin,self._hJtTestMeasBin,self._numberJetsMeasFromHist,self._numberJetsTestMeasBin):
       if n> 0:
-        h.Scale(1.0/n,"width")  
-    for h,n in zip(self._hJtTrueBin,self._numberJetsTrueFromHist):
-      if n > 0:
-        h.Scale(1.0/n,"width")
+        h.Scale(1.0/n,"width") 
+      if n2 > 0:
+        h2.Scale(1.0/n2,"width")  
+    if(not self._IsData):
+      for h,h2,n,n2 in zip(self._hJtTrueBin,self._hJtTestTrueBin,self._numberJetsTrueFromHist,self._numberJetsTestTrueBin):
+        if n > 0:
+          h.Scale(1.0/n,"width")
+        if n2 > 0:
+          h2.Scale(1.0/n2,"width")
     for h,n in zip(self._hJtRecoBin,self._numberJetsFromReco):
       if n > 0:
         h.Scale(1.0/n,"width")
+        
   def plotJetPt(self):
-    drawing.drawJetPt(self._hJetPtMeas,self._hJetPtTrue,self._hJetPtReco)
-    drawing.drawJetPt(self._hJetPtMeasCoarse,self._hJetPtTrueCoarse,self._hJetPtRecoCoarse)
-  def plotJt(self,filename):
-    drawing.draw8gridcomparison(self._hJtMeasBin,self._hJtTrueBin,self._jetPtBins,xlog = True,ylog = True,name=filename,unf2d = self._hJtRecoBin,fake= self._hJtFakeProjBin, start=1, stride=1)
+    if(self._IsData):
+      drawing.drawJetPt(self._hJetPtMeas,None,self._hJetPtReco,filename='JetPtUnfoldedData.pdf')
+      drawing.drawJetPt(self._hJetPtMeasCoarse,None,self._hJetPtRecoCoarse,filename='JetPtCoarseUnfoldedData.pdf')
+    else:
+      drawing.drawJetPt(self._hJetPtMeas,self._hJetPtTrue,self._hJetPtReco,filename='JetPtUnfolded.pdf')
+      drawing.drawJetPt(self._hJetPtMeasCoarse,self._hJetPtTrueCoarse,self._hJetPtRecoCoarse,filename='JetPtCoarseUnfolded.pdf')
+      
+  def plotJt(self,filename,**kwargs):
+    nRebin = kwargs.get('Rebin',1)
+    histlist = [self._hJtMeasBin,self._hJtRecoBin,self._hJtFakeProjBin]
+    if(not self._IsData):
+      histlist.append(self._hJtTrueBin)
+    if nRebin > 0:
+      for hists in histlist:
+        for h in hists:
+          h.Rebin(nRebin)
+          h.Scale(1.0/nRebin)
+    if(self._IsData):
+      drawing.draw8gridcomparison(self._hJtMeasBin,None,self._jetPtBins,xlog = True,ylog = True,name='{}.pdf'.format(filename),unf2d = self._hJtRecoBin, start=4, stride=1)
+      drawing.draw8gridcomparison(self._hJtMeasBin,None,self._jetPtBins,xlog = True,ylog = True,name='{}_Extra.pdf'.format(filename),unf2d = self._hJtRecoBin, start=0, stride=1)      
+    else:
+      drawing.draw8gridcomparison(self._hJtMeasBin,self._hJtTrueBin,self._jetPtBins,xlog = True,ylog = True,name='{}.pdf'.format(filename),unf2d = self._hJtRecoBin,fake= self._hJtFakeProjBin, start=4, stride=1)
+      drawing.draw8gridcomparison(self._hJtMeasBin,self._hJtTrueBin,self._jetPtBins,xlog = True,ylog = True,name='{}_Extra.pdf'.format(filename),unf2d = self._hJtRecoBin,fake= self._hJtFakeProjBin, start=0, stride=1)
+  
+  def plotLeadingJtComparison(self,filename,**kwargs):
+    nRebin = kwargs.get('Rebin',1)
+    histlist = [self._hJtTestTrueBin,self._hJtTrueBin,self._hJtMeasBin]
+    if nRebin > 1:
+      for hists in histlist:
+        for h in hists:
+          h.Rebin(nRebin)
+          h.Scale(1.0/nRebin)
+
+    drawing.draw8gridcomparison(self._hJtMeasBin,self._hJtTrueBin,self._jetPtBins,xlog = True,ylog = True,name='{}.pdf'.format(filename), leadingJt=self._hJtTestTrueBin,start=2, stride=1)
+    drawing.draw8gridcomparison(self._hJtMeasBin,self._hJtTrueBin,self._jetPtBins,xlog = True,ylog = True,name='{}_Extra.pdf'.format(filename), leadingJt=self._hJtTestTrueBin,start=0, stride=1)
+  
+  
+  def plotResponse(self):
+    fig,axs = plt.subplots(2,1,figsize=(10,10))
+    axs = axs.reshape(2)
+    for ax,h in zip(axs,(self._responseJetPt,self._response2D)):
+      hResponse = h.Hresponse()
+      xbins = [hResponse.GetXaxis().GetBinLowEdge(iBin) for iBin in range(1,hResponse.GetNbinsX()+2)]
+      ybins = [hResponse.GetYaxis().GetBinLowEdge(iBin) for iBin in range(1,hResponse.GetNbinsY()+2)]
+      drawing.drawResponse(ax,make2DHist(hResponse,xbins=xbins,ybins=ybins))
+    plt.show() #Draw figure on screen
+    
+    fig,ax=plt.subplots(1,1,figsize=(10,10))
+    hResponse=self._responseJetPt.Hresponse()
+    xbins = [hResponse.GetXaxis().GetBinLowEdge(iBin) for iBin in range(1,hResponse.GetNbinsX()+2)]
+    ybins = [hResponse.GetYaxis().GetBinLowEdge(iBin) for iBin in range(1,hResponse.GetNbinsY()+2)]    
+    drawing.drawPtResponse(ax,make2DHist(hResponse,xbins=xbins,ybins=ybins))
+    plt.savefig("JetPtResponse",format='pdf') #Save figure
+    plt.show()
 
   def printJetNumbers(self):
     print("Measured jets by bin")
     print(self._numberJetsMeasBin)
     print(self._numberJetsMeasFromHist)
-    print("True jets by bin")
-    print(self._numberJetsTrueBin)
-    print(self._numberJetsTrueFromHist)
+    if(not self._IsData):
+      print("True jets by bin")
+      print(self._numberJetsTrueBin)
+      print(self._numberJetsTrueFromHist)
     print("Unfolded jet numbers by bin:")
     print(self._numberJetsFromReco)
     print("Jet bin centers:")
     print([self._hJetPtRecoCoarse.GetBinCenter(i) for i in range(1,self._hJetPtRecoCoarse.GetNbinsX())])
 
   #TODO
-  def writeFiles(self,filename):
-    f = root_open(filename,'write')
+  def writeFiles(self,file):
+    print("{}: write results to file".format("JtUnfolder"))
     self._hJetPtMeas.Write()
           
 def main():
@@ -431,24 +534,28 @@ def main():
     numberEvents = int(sys.argv[1])
     if(len(sys.argv) > 2):
       randomSeed = int(sys.argv[2])
+    else: randomSeed = 123
   else:
     numberEvents = 5000
   rootFile = "legotrain_350_20161117-2106_LHCb4_fix_CF_pPb_MC_ptHardMerged.root"
   rootFile = 'AnalysisResults.root'
+  rootFile = 'legotrain_512_20180523-2331_LHCb4_fix_CF_pPb_MC_ptHardMerged.root'
   unfolderToy = JtUnfolder("ToyMC",NBINSJt=32,NBINS=64,randomSeed=randomSeed)
   unfolderToy.createToyTraining(rootFile, numberEvents)
   unfolderToy.createToyData(rootFile, numberEvents/2)
   unfolderToy.unfold()
+  if(numberEvents >= 1000):
+    if(numberEvents >= 1000000):
+      eString = "{}M_events".format(numberEvents/1000000)
+    else:
+      eString = "{}k_events".format(numberEvents/1000)
+  else:
+    eString = "{}_events".format(numberEvents)
+  unfolderToy.plotLeadingJtComparison("ToyMCLeadingJtTest_{}".format(eString))
+  return
   unfolderToy.plotResponse()
   unfolderToy.plotJetPt()
-  if(numberEvents > 1000):
-    if(numberEvents > 1000000):
-      filename = 'ToyMCUnfolder_{}M_events.pdf'.format(numberEvents/1000000)
-    else:
-      filename = 'ToyMCUnfolder_{}k_events.pdf'.format(numberEvents/1000)
-  else:
-    filename='ToyMCUnfolder_{}_events.pdf'.format(numberEvents)
-  unfolderToy.plotJt(filename)
+  unfolderToy.plotJt('ToyMCUnfolder_{}'.format(eString))
   
 if __name__ == "__main__": main()
       
