@@ -1,3 +1,6 @@
+import logging
+mpl_logger = logging.getLogger('matplotlib') 
+mpl_logger.setLevel(logging.WARNING) 
 from ROOT import gROOT
 from pickle import BINSTRING
 gROOT.ProcessLine( 'gSystem->Load("/Users/tuomas/OneDrive/work/032.JTAnalysis/Unfolding/Root6/RooUnfold/libRooUnfold");')
