@@ -33,10 +33,10 @@ import JtUnfolder
 from ctypes import c_int
 
 def main():
-  print 'Number of arguments: ', len(sys.argv), 'arguments.'
-  print 'Argument list:',str(sys.argv)
+  print('Number of arguments: ', len(sys.argv), 'arguments.')
+  print('Argument list:',str(sys.argv))
   filename = sys.argv[1]
-  print "Input file: {}".format(filename)
+  print("Input file: {}".format(filename))
   
   jetBinBorders = [5,10,20,30,40,60,80,100,150,500]
   jetPtBins = [(a,b) for a,b in zip(jetBinBorders,jetBinBorders[1:])]
