@@ -1,10 +1,11 @@
-from rootpy.plotting import Hist, Hist2D
-import rootpy
-import math
 from ROOT import TMath
+from ROOT import gROOT
+from rootpy.plotting import Hist, Hist2D
+import math
+import time
+gROOT.ProcessLine('gSystem->Load("/home/tomas/root/RooUnfold/libRooUnfold");')
 from ROOT import RooUnfoldResponse
 from ROOT import RooUnfoldBayes
-import time
 
 
 def fmtDelta(delta):

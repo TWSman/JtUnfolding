@@ -1,44 +1,34 @@
-import logging
-
-mpl_logger = logging.getLogger("matplotlib")
-mpl_logger.setLevel(logging.WARNING)
-from ROOT import gROOT
-
-gROOT.ProcessLine(
-    'gSystem->Load("/Users/tuomas/OneDrive/work/032.JTAnalysis/Unfolding/Root6/RooUnfold/libRooUnfold");'
-)
-from ROOT import gRandom, TH1, TH1D, cout, TF1, TH2D, TH2
-from ROOT import RooUnfoldResponse
-from ROOT import RooUnfold
-from ROOT import RooUnfoldBayes
-from ROOT import RooUnfoldSvd
-from ROOT import TMath
-from ROOT import TVector3
-from ROOT import TRandom3
-from ROOT import TNtuple
-from ROOT import TFile
-import matplotlib
-import rootpy.ROOT as ROOT
-
-# from ROOT import RooUnfoldSvd
-# from ROOT import RooUnfoldTUnfold
-# from ROOT import RooUnfoldIds
-import rootpy
-from matplotlib.colors import LogNorm
-from matplotlib.colors import Normalize
-from matplotlib.ticker import MaxNLocator
-from matplotlib.ticker import LogLocator
-from rootpy.plotting import Hist, Hist2D, Hist3D
-import rootpy.plotting.root2matplotlib as rplt
-import matplotlib.pyplot as plt
-import math
+from defs import createResponseInverse
 from rootpy.io import root_open
-import sys
-from drawing import *
-from defs import *
-import time
+from rootpy.plotting import Hist
 import JtUnfolder
-from ctypes import c_int
+import sys
+
+
+def get_hists(in_file, base_folder, histname, iFinder, Njets=0):
+    if Njets == 0:
+        return in_file.Get(
+                "{}/{}/{}NFin{:02d}".format(
+                    base_folder, histname, histname, iFinder
+                )
+            )
+    else:
+        return [
+            in_file.Get(
+                "{}/{}/{}NFin{:02d}JetPt{:02d}".format(
+                    base_folder, histname, histname, iFinder, iJet
+                )
+            )
+            for iJet in range(Njets)
+        ]
+
+
+def get_numbers(in_file, base_folder, histname, iFinder, Njets):
+    return [x.Integral() for x in get_hists(in_file,
+                                            base_folder,
+                                            histname,
+                                            iFinder,
+                                            Njets)]
 
 
 def main():
@@ -71,149 +61,87 @@ def main():
     iMCFinder = iFinder + nR * 2
 
     if f_data:
-        numberJetsDataMB = [
-            f_data.Get(
-                "AliJJetJtTask/AliJJetJtHistManager/JetPtBin/JetPtBinNFin{:02d}JetPt{:02d}".format(
-                    iFinder, iJet
-                )
-            ).Integral()
-            for iJet in range(Njets)
-        ]
-        hTrackJtDataMB = [
-            f_data.Get(
-                "AliJJetJtTask/AliJJetJtHistManager/JetConeJtWeightBin/JetConeJtWeightBinNFin{:02d}JetPt{:02d}".format(
-                    iFinder, iJet
-                )
-            )
-            for iJet in range(Njets)
-        ]
-        hTrackJt2DDataMB = f_data.Get(
-            "AliJJetJtTask/AliJJetJtHistManager/JtWeight2D/JtWeight2DNFin{:02d}".format(
-                iFinder
-            )
-        )
+        base_folder = "AliJJetJtTask/AliJJetJtHistManager"
+        base_folder_trig = "AliJJetJtTask_kEMCEJE/AliJJetJtHistManager"
+        numberJetsDataMB = get_numbers(f_data, base_folder, "JetPtBin",
+                                       iFinder, Njets)
+
+        numberJetsDataTriggered = get_numbers(f_data, base_folder_trig, "JetPtBin",
+                                              iFinder, Njets)
+
+        hTrackJtDataMB = get_hists(f_data, base_folder, "JetConeJtWeightBin",
+                                   iFinder, Njets)
+        hTrackJtDataTriggered = get_hists(f_data, base_folder_trig, "JetConeJtWeightBin",
+                                          iFinder, Njets)
+
+        hTrackJt2DDataMB = get_hists(f_data, base_folder, "JtWeight2D", iFinder)
+        hTrackJt2DDataTriggered = get_hists(f_data, base_folder_trig,
+                                            "JtWeight2D", iFinder)
+
         hJetPtDataMBCoarse = Hist(jetBinBorders)
         for n, i in zip(numberJetsDataMB, range(1, Njets + 1)):
             hJetPtDataMBCoarse.SetBinContent(i, n)
-        hJetPtDataMB = f_data.Get(
-            "AliJJetJtTask/AliJJetJtHistManager/JetPt/JetPtNFin{:02d}".format(iFinder)
-        )
 
-        numberJetsDataTriggered = [
-            f_data.Get(
-                "AliJJetJtTask_kEMCEJE/AliJJetJtHistManager/JetPtBin/JetPtBinNFin{:02d}JetPt{:02d}".format(
-                    iFinder, iJet
-                )
-            ).Integral()
-            for iJet in range(Njets)
-        ]
-        hTrackJtDataTriggered = [
-            f_data.Get(
-                "AliJJetJtTask_kEMCEJE/AliJJetJtHistManager/JetConeJtWeightBin/JetConeJtWeightBinNFin{:02d}JetPt{:02d}".format(
-                    iFinder, iJet
-                )
-            )
-            for iJet in range(Njets)
-        ]
-        hTrackJt2DDataTriggered = f_data.Get(
-            "AliJJetJtTask_kEMCEJE/AliJJetJtHistManager/JtWeight2D/JtWeight2DNFin{:02d}".format(
-                iFinder
-            )
-        )
         hJetPtDataTriggeredCoarse = Hist(jetBinBorders)
         for n, i in zip(numberJetsDataTriggered, range(1, Njets + 1)):
             hJetPtDataTriggeredCoarse.SetBinContent(i, n)
-        hJetPtDataTriggered = f_data.Get(
-            "AliJJetJtTask_kEMCEJE/AliJJetJtHistManager/JetPt/JetPtNFin{:02d}".format(
-                iFinder
-            )
-        )
 
-    numberJetsMeas = [
-        f_test.Get(
-            "AliJJetJtTask/AliJJetJtHistManager/JetPtBin/JetPtBinNFin{:02d}JetPt{:02d}".format(
-                iFinder, iJet
-            )
-        ).Integral()
-        for iJet in range(Njets)
-    ]
-    numberJetsTrue = [
-        f_test.Get(
-            "AliJJetJtTask/AliJJetJtHistManager/JetPtBin/JetPtBinNFin{:02d}JetPt{:02d}".format(
-                iMCFinder, iJet
-            )
-        ).Integral()
-        for iJet in range(Njets)
-    ]
-    hTrackJtMeas = [
-        f_test.Get(
-            "AliJJetJtTask/AliJJetJtHistManager/JetConeJtWeightBin/JetConeJtWeightBinNFin{:02d}JetPt{:02d}".format(
-                iFinder, iJet
-            )
-        )
-        for iJet in range(Njets)
-    ]
-    hTrackJtTrue = [
-        f_test.Get(
-            "AliJJetJtTask/AliJJetJtHistManager/JetConeJtWeightBin/JetConeJtWeightBinNFin{:02d}JetPt{:02d}".format(
-                iMCFinder, iJet
-            )
-        )
-        for iJet in range(Njets)
-    ]
-    numberJetsMeasTrain = [
-        f.Get(
-            "AliJJetJtTask/AliJJetJtHistManager/JetPtBin/JetPtBinNFin{:02d}JetPt{:02d}".format(
-                iFinder, iJet
-            )
-        ).Integral()
-        for iJet in range(Njets)
-    ]
+        hJetPtDataMB = get_hists(f_data, base_folder, "JetPt", iFinder)
+        hJetPtDataTriggered = get_hists(f_data, base_folder_trig, "JetPt", iFinder)
+
+        # Get Background distributions
+        hBgJtDataMB = get_hists(f_data, base_folder, "BgJtWeightBin",
+                                iFinder, Njets)
+        hBgJtDataTriggered = get_hists(f_data, base_folder_trig, "BgJtWeightBin",
+                                       iFinder, Njets)
+
+        # Get number of background jets
+        hBgNumbersDataMB = get_numbers(f_data, base_folder, "BgTrkNumberBin",
+                                       iFinder, Njets)
+
+        hBgNumbersDataTriggered = get_numbers(f_data, base_folder_trig, "BgTrkNumberBin",
+                                              iFinder, Njets)
+
+    numberJetsMeas = get_numbers(f_test, base_folder, "JetPtBin", iFinder,
+                                 Njets)
+
+    numberJetsTrue = get_numbers(f_test, base_folder, "JetPtBin",
+                                 iMCFinder, Njets)
+
+    hTrackJtMeas = get_hists(f_test, base_folder, "JetConeJtWeightBin",
+                             iFinder, Njets)
+    hTrackJtTrue = get_hists(f_test, base_folder, "JetConeJtWeightBin",
+                             iMCFinder, Njets)
+
+    numberJetsMeasTrain = get_numbers(f, base_folder, "JetPtBin",
+                                      iFinder, Njets)
 
     print("Measured Jets:")
     print(numberJetsMeas)
     print("True Jets:")
     print(numberJetsTrue)
-    hTrackJtCorr2D = [
-        f.Get(
-            "AliJJetJtTask/AliJJetJtMCHistManager/TrackJtCorr2D/TrackJtCorr2DNFin{:02d}JetPt{:02d}".format(
-                iFinder, iJet
-            )
-        )
-        for iJet in range(Njets)
-    ]
-    hTrackJtMeas2D = f_test.Get(
-        "AliJJetJtTask/AliJJetJtHistManager/JtWeight2D/JtWeight2DNFin{:02d}".format(
-            iFinder
-        )
-    )
-    hTrackJtTrue2D = f_test.Get(
-        "AliJJetJtTask/AliJJetJtHistManager/JtWeight2D/JtWeight2DNFin{:02d}".format(
-            iMCFinder
-        )
-    )
-    hTrackJtMisses2D = f.Get(
-        "AliJJetJtTask/AliJJetJtMCHistManager/TrackJtMisses2D/TrackJtMisses2DNFin{:02d}".format(
-            iFinder
-        )
-    )
-    hTrackJtFakes2D = f.Get(
-        "AliJJetJtTask/AliJJetJtHistManager/JetConeJtUnfBg2D/JetConeJtUnfBg2DNFin{:02d}".format(
-            iFinder
-        )
-    )
+    base_folder_MC = "AliJJetJtTask/AliJJetJtMCHistManager"
+    hTrackJtCorr2D = get_hists(f, base_folder_MC,
+                               "TrackJtCorr2D", iFinder, Njets)
+    hTrackJtMeas2D = get_hists(f_test, base_folder,
+                               "JtWeight2D", iFinder)
+    hTrackJtTrue2D = get_hists(f_test, base_folder,
+                               "JtWeight2D", iMCFinder)
+    hTrackJtMisses2D = get_hists(f, base_folder_MC,
+                                 "TrackJtMisses2D", iFinder)
+    hTrackJtFakes2D = get_hists(f, base_folder,
+                                "JetConeJtUnfBg2D", iFinder)
+    hTrackJtBg = get_hists(f, base_folder,
+                           "BgJtWeightBin", iFinder, Njets)
+
+    hTrackJtBgNumber = get_numbers(f, base_folder,
+                                   "BgTrkNumberBin", iFinder, Njets)
+    # Get number of background jets
 
     print(hTrackJtMeas2D.GetTitle())
     print(hTrackJtTrue2D.GetTitle())
 
-    hTrackMatchSuccess = [
-        f.Get(
-            "AliJJetJtTask/AliJJetJtMCHistManager/TrackMatchSuccess/TrackMatchSuccessNFin{:02d}JetPt{:02d}".format(
-                iFinder, iJet
-            )
-        )
-        for iJet in range(Njets)
-    ]
+    hTrackMatchSuccess = get_hists(f, base_folder_MC, "TrackMatchSuccess", iFinder, Njets)
 
     #   for h in hTrackJtCorr2D:
     #     print("Bin 25702 content : {}".format(h.GetBinContent(25702)))
@@ -250,16 +178,18 @@ def main():
 
     for h in hTrackJtCorr2D:
         print("{}".format(h.GetTitle()))
-    hJetPtMeas = f_test.Get(
-        "AliJJetJtTask/AliJJetJtHistManager/JetPt/JetPtNFin{:02d}".format(iFinder)
-    )
+    hJetPtMeas = get_hists(f_test,
+                           base_folder,
+                           "JetPt",
+                           iFinder)
     hJetPtMeasCoarse = Hist(jetBinBorders)
     for n, i in zip(numberJetsMeas, range(1, Njets + 1)):
         hJetPtMeasCoarse.SetBinContent(i, n)
 
-    hJetPtTrue = f_test.Get(
-        "AliJJetJtTask/AliJJetJtHistManager/JetPt/JetPtNFin{:02d}".format(iMCFinder)
-    )
+    hJetPtTrue = get_hists(f_test,
+                           base_folder,
+                           "JetPt",
+                           iMCFinder)
     hJetPtTrueCoarse = Hist(jetBinBorders)
     for n, i in zip(numberJetsTrue, range(1, Njets + 1)):
         hJetPtTrueCoarse.SetBinContent(i, n)
@@ -267,84 +197,100 @@ def main():
         hJetPtTrue.GetXaxis().GetBinLowEdge(iBin)
         for iBin in range(1, hJetPtTrue.GetNbinsX() + 2)
     ]
-    hJetPtResponse = f.Get(
-        "AliJJetJtTask/AliJJetJtMCHistManager/JetPtCorr/JetPtCorrNFin{:02d}".format(
-            iFinder
-        )
-    )
-    hJetPtResponseCoarse = f.Get(
-        "AliJJetJtTask/AliJJetJtMCHistManager/JetPtCorrCoarse/JetPtCorrCoarseNFin{:02d}".format(
-            iFinder
-        )
-    )
+    hJetPtResponse = get_hists(f, base_folder_MC,
+                               "JetPtCorr", iFinder)
+    hJetPtResponseCoarse = get_hists(f, base_folder_MC,
+                                     "JetPtCorrCoarse", iFinder)
 
-    TrackJtUnfolder = JtUnfolder.JtUnfolder(
-        "TrackJtUnfolder", jetBinBorders=jetBinBorders, Njets=Njets, Iterations=5
+    if False:
+        TrackJtUnfolder = JtUnfolder.JtUnfolder(
+            "TrackJtUnfolder",
+            jetBinBorders=jetBinBorders,
+            Njets=Njets,
+            Iterations=5,
+            Data=True,
+        )
+        TrackJtUnfolder.setTrackMatch(hTrackMatchSuccess)
+        # TrackJtUnfolder.drawTrackMatch("TrackMatch",'single')
+        TrackJtUnfolder.setPtBins(LogBinsPt)
+        TrackJtUnfolder.setJtBins(LogBinsJt)
+        TrackJtUnfolder.setJtMeas2D(hTrackJtMeas2D)
+        TrackJtUnfolder.setJtTestMeas2D(hTrackJtMeas2D)
+        TrackJtUnfolder.setJtTrue2D(hTrackJtTrue2D)
+        TrackJtUnfolder.setJtTestTrue2D(hTrackJtTrue2D)
+        TrackJtUnfolder.setMisses2D(hTrackJtMisses2D)
+        TrackJtUnfolder.setFakes2D(hTrackJtFakes2D)
+        TrackJtUnfolder.setJetPtMeas(hJetPtMeas)
+        TrackJtUnfolder.setJetPtTrue(hJetPtTrue)
+        TrackJtUnfolder.setJetPtMeasCoarse(hJetPtMeasCoarse)
+        TrackJtUnfolder.setJetPtTrueCoarse(hJetPtTrueCoarse)
+        TrackJtUnfolder.setJetPtResponse(
+            createResponseInverse(hJetPtMeas, hJetPtResponse)
+        )
+        TrackJtUnfolder.setJetPtResponseCoarse(
+            createResponseInverse(hJetPtMeasCoarse, hJetPtResponseCoarse)
+        )
+        TrackJtUnfolder.setNumberJetsMeas(numberJetsMeas)
+        TrackJtUnfolder.setNumberJetsTrue(numberJetsTrue)
+        TrackJtUnfolder.setNumberJetsTestMeas(numberJetsMeas)
+        TrackJtUnfolder.setNumberJetsTestTrue(numberJetsTrue)
+        TrackJtUnfolder.setNumberJetsMeasTrain(sum(numberJetsMeasTrain))
+        TrackJtUnfolder.set2Dresponse(hTrackJtCorr2D)
+        TrackJtUnfolder.setJtBackground(hTrackJtBg)
+        TrackJtUnfolder.setJtBackgroundNumbers(hTrackJtBgNumber)
+        TrackJtUnfolder.unfold()
+        TrackJtUnfolder.writeFiles("dataUnfolded.root")
+        # TrackJtUnfolder.plotResponse()
+        # TrackJtUnfolder.plotJetPt()
+        # TrackJtUnfolder.plotJt("PythiaTest", Rebin=4)
+        return
+
+    MBDataJtUnfolder = JtUnfolder.JtUnfolder(
+        "MBDataUnfolder",
+        jetBinBorders=jetBinBorders,
+        Njets=Njets,
+        Data=True,
+        Iterations=5,
     )
-    TrackJtUnfolder.setTrackMatch(hTrackMatchSuccess)
-    # TrackJtUnfolder.drawTrackMatch("TrackMatch",'single')
-    TrackJtUnfolder.setPtBins(LogBinsPt)
-    TrackJtUnfolder.setJtBins(LogBinsJt)
-    TrackJtUnfolder.setJtMeas2D(hTrackJtMeas2D)
-    TrackJtUnfolder.setJtTestMeas2D(hTrackJtMeas2D)
-    TrackJtUnfolder.setJtTrue2D(hTrackJtTrue2D)
-    TrackJtUnfolder.setJtTestTrue2D(hTrackJtTrue2D)
-    TrackJtUnfolder.setMisses2D(hTrackJtMisses2D)
-    TrackJtUnfolder.setFakes2D(hTrackJtFakes2D)
-    TrackJtUnfolder.setJetPtMeas(hJetPtMeas)
-    TrackJtUnfolder.setJetPtTrue(hJetPtTrue)
-    TrackJtUnfolder.setJetPtMeasCoarse(hJetPtMeasCoarse)
-    TrackJtUnfolder.setJetPtTrueCoarse(hJetPtTrueCoarse)
-    TrackJtUnfolder.setJetPtResponse(createResponseInverse(hJetPtMeas, hJetPtResponse))
-    TrackJtUnfolder.setJetPtResponseCoarse(
+    MBDataJtUnfolder.setPtBins(LogBinsPt)
+    MBDataJtUnfolder.setJtBins(LogBinsJt)
+    MBDataJtUnfolder.setJtMeas2D(hTrackJt2DDataMB)
+    MBDataJtUnfolder.setJtTrue2D(hTrackJtTrue2D)
+    MBDataJtUnfolder.setJtTestTrue2D(hTrackJtTrue2D)
+    MBDataJtUnfolder.setFakes2D(hTrackJtFakes2D)
+    MBDataJtUnfolder.setMisses2D(hTrackJtMisses2D)
+    MBDataJtUnfolder.setJetPtMeas(hJetPtDataMB)
+    MBDataJtUnfolder.setJetPtMeasCoarse(hJetPtDataMBCoarse)
+    MBDataJtUnfolder.setJetPtResponse(createResponseInverse(hJetPtMeas, hJetPtResponse))
+    MBDataJtUnfolder.setJetPtResponseCoarse(
         createResponseInverse(hJetPtMeasCoarse, hJetPtResponseCoarse)
     )
-    TrackJtUnfolder.setNumberJetsMeas(numberJetsMeas)
-    TrackJtUnfolder.setNumberJetsTrue(numberJetsTrue)
-    TrackJtUnfolder.setNumberJetsTestMeas(numberJetsMeas)
-    TrackJtUnfolder.setNumberJetsTestTrue(numberJetsTrue)
-    TrackJtUnfolder.setNumberJetsMeasTrain(sum(numberJetsMeasTrain))
-    TrackJtUnfolder.set2Dresponse(hTrackJtCorr2D)
-    TrackJtUnfolder.unfold()
-    TrackJtUnfolder.plotResponse()
-    TrackJtUnfolder.plotJetPt()
-    TrackJtUnfolder.plotJt("PythiaTest", Rebin=4)
-    return
+    MBDataJtUnfolder.setNumberJetsMeas(numberJetsDataMB)
+    MBDataJtUnfolder.setNumberJetsMeasTrain(sum(numberJetsMeasTrain))
+    MBDataJtUnfolder.set2Dresponse(hTrackJtCorr2D)
+    MBDataJtUnfolder.setJtBackground(hBgJtDataMB)
+    MBDataJtUnfolder.setJtBackgroundNumbers(hBgNumbersDataMB)
+    MBDataJtUnfolder.unfold()
+    MBDataJtUnfolder.writeFiles("dataUnfolded.root")
+    MBDataJtUnfolder.plotJt("MBDataUnfolded", Rebin=4)
 
+    # TriggeredDataJtUnfolder = JtUnfolder.JtUnfolder('TriggeredDataUnfolder',jetBinBorders=jetBinBorders,Njets=Njets,Data=True,Iterations=5)
+    # TriggeredDataJtUnfolder.setPtBins(LogBinsPt)
+    # TriggeredDataJtUnfolder.setJtBins(LogBinsJt)
+    # TriggeredDataJtUnfolder.setJtMeas2D(hTrackJt2DDataTriggered)
+    # TriggeredDataJtUnfolder.setFakes2D(hTrackJtFakes2D)
+    # TriggeredDataJtUnfolder.setMisses2D(hTrackJtMisses2D)
+    # TriggeredDataJtUnfolder.setJetPtMeas(hJetPtDataTriggered)
+    # TriggeredDataJtUnfolder.setJetPtMeasCoarse(hJetPtDataTriggeredCoarse)
+    # TriggeredDataJtUnfolder.setJetPtResponse(createResponseInverse(hJetPtMeas, hJetPtResponse))
+    # TriggeredDataJtUnfolder.setJetPtResponseCoarse(createResponseInverse(hJetPtMeasCoarse, hJetPtResponseCoarse))
+    # TriggeredDataJtUnfolder.setNumberJetsMeas(numberJetsDataTriggered)
+    # TriggeredDataJtUnfolder.setNumberJetsMeasTrain(sum(numberJetsMeasTrain))
+    # TriggeredDataJtUnfolder.set2Dresponse(hTrackJtCorr2D)
+    # TriggeredDataJtUnfolder.unfold()
+    # TriggeredDataJtUnfolder.plotJetPt()
+    # TriggeredDataJtUnfolder.plotJt("TriggeredDataUnfolded",Rebin=4)
 
-#   MBDataJtUnfolder = JtUnfolder.JtUnfolder('MBDataUnfolder',jetBinBorders=jetBinBorders,Njets=Njets,Data=True,Iterations=5)
-#   MBDataJtUnfolder.setPtBins(LogBinsPt)
-#   MBDataJtUnfolder.setJtBins(LogBinsJt)
-#   MBDataJtUnfolder.setJtMeas2D(hTrackJt2DDataMB)
-#   MBDataJtUnfolder.setFakes2D(hTrackJtFakes2D)
-#   MBDataJtUnfolder.setMisses2D(hTrackJtMisses2D)
-#   MBDataJtUnfolder.setJetPtMeas(hJetPtDataMB)
-#   MBDataJtUnfolder.setJetPtMeasCoarse(hJetPtDataMBCoarse)
-#   MBDataJtUnfolder.setJetPtResponse(createResponseInverse(hJetPtMeas, hJetPtResponse))
-#   MBDataJtUnfolder.setJetPtResponseCoarse(createResponseInverse(hJetPtMeasCoarse, hJetPtResponseCoarse))
-#   MBDataJtUnfolder.setNumberJetsMeas(numberJetsDataMB)
-#   MBDataJtUnfolder.setNumberJetsMeasTrain(sum(numberJetsMeasTrain))
-#   MBDataJtUnfolder.set2Dresponse(hTrackJtCorr2D)
-#   MBDataJtUnfolder.unfold()
-#   MBDataJtUnfolder.plotJt("MBDataUnfolded",Rebin=4)
-
-
-# TriggeredDataJtUnfolder = JtUnfolder.JtUnfolder('TriggeredDataUnfolder',jetBinBorders=jetBinBorders,Njets=Njets,Data=True,Iterations=5)
-# TriggeredDataJtUnfolder.setPtBins(LogBinsPt)
-# TriggeredDataJtUnfolder.setJtBins(LogBinsJt)
-# TriggeredDataJtUnfolder.setJtMeas2D(hTrackJt2DDataTriggered)
-# TriggeredDataJtUnfolder.setFakes2D(hTrackJtFakes2D)
-# TriggeredDataJtUnfolder.setMisses2D(hTrackJtMisses2D)
-# TriggeredDataJtUnfolder.setJetPtMeas(hJetPtDataTriggered)
-# TriggeredDataJtUnfolder.setJetPtMeasCoarse(hJetPtDataTriggeredCoarse)
-# TriggeredDataJtUnfolder.setJetPtResponse(createResponseInverse(hJetPtMeas, hJetPtResponse))
-# TriggeredDataJtUnfolder.setJetPtResponseCoarse(createResponseInverse(hJetPtMeasCoarse, hJetPtResponseCoarse))
-# TriggeredDataJtUnfolder.setNumberJetsMeas(numberJetsDataTriggered)
-# TriggeredDataJtUnfolder.setNumberJetsMeasTrain(sum(numberJetsMeasTrain))
-# TriggeredDataJtUnfolder.set2Dresponse(hTrackJtCorr2D)
-# TriggeredDataJtUnfolder.unfold()
-# TriggeredDataJtUnfolder.plotJetPt()
-# TriggeredDataJtUnfolder.plotJt("TriggeredDataUnfolded",Rebin=4)
 
 if __name__ == "__main__":
     main()

@@ -1,15 +1,7 @@
-import matplotlib
-import rootpy.ROOT as ROOT
-import rootpy
 from matplotlib.colors import LogNorm
-from matplotlib.colors import PowerNorm
-from matplotlib.colors import Normalize
 from matplotlib.ticker import MaxNLocator
-from matplotlib.ticker import LogLocator
-from matplotlib.backends.backend_pdf import PdfPages
-from rootpy.plotting import Hist, Hist2D
-import rootpy.plotting.root2matplotlib as rplt
 import matplotlib.pyplot as plt
+import rootpy.plotting.root2matplotlib as rplt
 
 
 def drawJetPt(hMeas, hTrue, hReco, filename="JetPt"):
@@ -36,9 +28,9 @@ def drawJetPt(hMeas, hTrue, hReco, filename="JetPt"):
         r"Anti-$k_T$, R=0.4",
         fontsize=7,
     )
-    axs[0].set_ylabel(r"$\frac{dN}{dp_{T}}$", fontsize=18)
-    axs[0].set_xlabel(r"$p_{T}$", fontsize=18)
-    axs[1].set_xlabel(r"$p_{T}$", fontsize=18)
+    axs[0].set_ylabel(r"$\frac{dN}{dp_{T,jet}}$", fontsize=18)
+    axs[0].set_xlabel(r"$p_{T,jet}$", fontsize=18)
+    axs[1].set_xlabel(r"$p_{T,jet}$", fontsize=18)
     axs[1].set_ylabel("Ratio", fontsize=18)
 
     ax = axs[0]
@@ -513,7 +505,9 @@ def draw8gridcomparison(
     leadingJt=None,
     **kwargs
 ):
-    """Create an 4 by 2 grid of subfigures with shared axes and plots jT with background in jet pT bins
+    """Create an 4 by 2 grid of subfigures with shared axes and plots jT with
+    background in jet pT bins
+
   Args:
     measJt: List of jT histograms
     jetPt: List of jet Pt bins in tuples (low border, high border)
@@ -529,12 +523,12 @@ def draw8gridcomparison(
         stride = kwargs.get("stride")
     else:
         stride = 2
-    fig, axs = plt.subplots(
-        2, 4, figsize=(14, 7), sharey=False, sharex=True
-    )  # Create figure with 8 subfigures, axs is a list of subfigures, fig is the whole thing
-    axs = axs.reshape(
-        8
-    )  # Because the figures is in a 2x4 layout axs is a 2 dimensional array with 2x4 elements, this makes it a 1 dimensional array with 8 elements
+    # Create figure with 8 subfigures, axs is a list of subfigures,
+    # fig is the whole thing
+    fig, axs = plt.subplots(2, 4, figsize=(14, 7), sharey=False, sharex=True)
+    # Because the figures is in a 2x4 layout axs is a 2 dimensional array
+    # with 2x4 elements, this makes it a 1 dimensional array with 8 elements
+    axs = axs.reshape(8)
     # axs[1].text(0.02,0.005,r'pPb $\sqrt{s_{NN}} = 5.02 \mathrm{TeV}$' '\n Charged jT\n' r'Anti-$k_T$, R=0.4' '\nJet Cone',fontsize=7) #Add text to second subfigure, first parameters are coordinates in the drawn scale/units
     for ax in [axs[0], axs[3]]:
         ax.set_ylabel(
@@ -545,11 +539,12 @@ def draw8gridcomparison(
             "Ratio to truth", fontsize=12
         )  # Add y-axis labels to left- and righmost subfigures
     for ax in axs[4:]:
-        ax.set_xlabel(r"$j_{T}\left[GeV\right]$")  # Add x-axis labels for bottom row
+        # Add x-axis labels for bottom row
+        ax.set_xlabel(r"$j_{T}\left[GeV\right]$")
     for ax in [axs[3], axs[7]]:
-        ax.yaxis.set_label_position(
-            "right"
-        )  # Set the y-axis label position to right hand side for the rightmost subfigures
+        # Set the y-axis label position to right hand
+        # side for the rightmost subfigures
+        ax.yaxis.set_label_position("right")
 
     if trueJt:
         divider = trueJt

@@ -1,26 +1,26 @@
-import logging
-
-mpl_logger = logging.getLogger("matplotlib")
-mpl_logger.setLevel(logging.WARNING)
-from ROOT import gROOT
-from pickle import BINSTRING
-
-gROOT.ProcessLine(
-    'gSystem->Load("/Users/tuomas/OneDrive/work/032.JTAnalysis/Unfolding/Root6/RooUnfold/libRooUnfold");'
+from defs import (
+    GetBin,
+    createResponse,
+    fmtDelta,
+    make2DHist,
+    make2Dresponse,
+    makeHist,
+    scaleJet,
+    unfoldJetPt,
 )
-from rootpy.io import root_open
-from ROOT import TMath, TRandom3, TVector3
 from ROOT import TF1
-from ROOT import RooUnfoldResponse
-from ROOT import RooUnfoldBayes
-import math
+from ROOT import TMath, TRandom3, TVector3
+from ROOT import gROOT
+from datetime import datetime, timedelta
+from rootpy.io import root_open
 from rootpy.plotting import Hist, Hist2D, Hist3D
-import matplotlib.pyplot as plt
-from datetime import datetime
-from datetime import timedelta
-from defs import *
 import drawing
+import math
+import matplotlib.pyplot as plt
 import sys
+gROOT.ProcessLine('gSystem->Load("/home/tomas/root/RooUnfold/libRooUnfold");')
+from ROOT import RooUnfoldBayes
+from ROOT import RooUnfoldResponse
 
 
 class JtUnfolder(object):
@@ -45,6 +45,13 @@ class JtUnfolder(object):
         self._IsData = kwargs.get("Data", False)
         self._hJtTrue2D = None
         self._Niter = kwargs.get("Iterations", 4)
+        self._NFin = kwargs.get("NFin", 0)
+
+    def fill_jt_histogram(self, histo, jt, pt):
+        if self._weight:
+            histo.Fill(jt, pt, 1.0 / jt)
+        else:
+            histo.Fill(jt, pt)
 
     def setTrackMatch(self, hists):
         self._matching = hists
@@ -332,6 +339,7 @@ class JtUnfolder(object):
         start_time = datetime.now()
         numberEvents = numberEvents
         ieout = numberEvents / 10
+        jtLeadingMeas = 0
         if ieout > 20000:
             ieout = 20000
         for ievt in range(numberEvents):
@@ -430,54 +438,42 @@ class JtUnfolder(object):
                     zLeadingTrue = (track * leading.Unit()) / leading.Mag()
                     jtLeadingTrue = (track - scaleJet(leading, zLeadingTrue)).Mag()
                 if ij_true >= 0:
-                    if self._weight:
-                        self._hJtTrue2D.Fill(jtTrue, jetTrue.Pt(), 1.0 / jtTrue)
-                        if (track.Pt() < 0.95 * leading.Pt()) and doLeading:
-                            self._hJtTestTrue2D.Fill(
-                                jtLeadingTrue, jetTrue.Pt(), 1.0 / jtLeadingTrue
-                            )
-                    else:
-                        self._hJtTrue2D.Fill(jtTrue, jetTrue.Pt())
-                        if track.Pt() < 0.95 * leading.Pt() and doLeading:
-                            self._hJtTestTrue2D.Fill(jtLeadingTrue, jetTrue.Pt())
-                if ij_meas >= 0:
-                    if tracksMeas[it] == 1:
-                        zMeas = (track * jetMeas.Unit()) / jetMeas.Mag()
-                        jtMeas = (track - scaleJet(jetMeas, zMeas)).Mag()
-                        if track.Pt() < 0.95 * leading.Pt():
-                            zLeadingMeas = (track * leading.Unit()) / leading.Mag()
-                            jtLeadingMeas = (
-                                track - scaleJet(leading, zLeadingMeas)
-                            ).Mag()
-                        self._hZMeas.Fill(zMeas)
-                        if self._weight:
-                            self._hJtMeas2D.Fill(jtMeas, jetMeas.Pt(), 1.0 / jtMeas)
-                            if track.Pt() < 0.95 * leadingPt and doLeading:
-                                self._hJtTestMeas2D.Fill(
-                                    jtLeadingMeas, jetMeas.Pt(), 1.0 / jtLeadingMeas
-                                )
-                        else:
-                            self._hJtMeas2D.Fill(jtMeas, jetMeas.Pt())
-                            if track.Pt() < 0.95 * leadingPt and doLeading:
-                                self._hJtTestMeas2D.Fill(jtLeadingMeas, jetMeas.Pt())
-            if ij_meas >= 0:
-                for fake in fakes:
-                    zFake = (fake * jetMeas.Unit()) / jetMeas.Mag()
-                    jtFake = (fake - scaleJet(jetMeas, zFake)).Mag()
-                    zLeadingFake = (fake * leading.Unit()) / leading.Mag()
-                    jtLeadingFake = (fake - scaleJet(leading, zLeadingFake)).Mag()
-                    self._hZMeas.Fill(zFake)
-                    self._hZFake.Fill(zFake)
-                    if self._weight:
-                        self._hJtMeas2D.Fill(jtFake, jetMeas.Pt(), 1.0 / jtFake)
-                        self._hJtTestMeas2D.Fill(
-                            jtLeadingFake, leadingPt, 1.0 / jtLeadingFake
+                    self.fill_jt_histogram(self._hJtTrue2D, jtTrue, jetTrue.Pt())
+                    if (track.Pt() < 0.95 * leading.Pt()) and doLeading:
+                        self.fill_jt_histogram(
+                            self._hJtTestTrue2D, jtLeadingTrue, jetTrue.Pt()
                         )
-                        # self._hJtFake2D.Fill(jtFake,jetMeas.Pt(),1.0/jtFake)
-                    else:
-                        self._hJtMeas2D.Fill(jtFake, jetMeas.Pt())
-                        self._hJtTestMeas2D.Fill(jtLeadingFake, leadingPt)
-                        # self._hJtFake2D.Fill(jtFake,jetMeas.Pt())
+                if ij_meas >= 0 and tracksMeas[it] == 1:
+                    zMeas = (track * jetMeas.Unit()) / jetMeas.Mag()
+                    jtMeas = (track - scaleJet(jetMeas, zMeas)).Mag()
+                    if track.Pt() < 0.95 * leading.Pt():
+                        zLeadingMeas = (track * leading.Unit()) / leading.Mag()
+                        jtLeadingMeas = (track - scaleJet(leading, zLeadingMeas)).Mag()
+                    self._hZMeas.Fill(zMeas)
+
+                    self.fill_jt_histogram(self._hJtMeas2D, jtMeas, jetMeas.Pt())
+                    if (
+                        track.Pt() < 0.95 * leadingPt
+                        and doLeading
+                        and jtLeadingMeas > 0
+                    ):
+                        self.fill_jt_histogram(
+                            self._hJtTestMeas2D, jtLeadingMeas, jetMeas.Pt()
+                        )
+
+            if ij_meas < 0:
+                continue
+
+            for fake in fakes:
+                zFake = (fake * jetMeas.Unit()) / jetMeas.Mag()
+                jtFake = (fake - scaleJet(jetMeas, zFake)).Mag()
+                zLeadingFake = (fake * leading.Unit()) / leading.Mag()
+                jtLeadingFake = (fake - scaleJet(leading, zLeadingFake)).Mag()
+                self._hZMeas.Fill(zFake)
+                self._hZFake.Fill(zFake)
+                self.fill_jt_histogram(self._hJtMeas2D, jtFake, jetMeas.Pt())
+                self.fill_jt_histogram(self._hJtTestMeas2D, jtLeadingFake, leadingPt)
+                # self.fill_jt_histogram(self._hJtFake2D, jtFake,jetMeas.Pt())
 
         time_elapsed = datetime.now() - start_time
         print(
@@ -560,7 +556,9 @@ class JtUnfolder(object):
         ]
         self.printJetNumbers()
 
-        unfold2D = RooUnfoldBayes(self._response2D, self._hJtMeas2D, self._Niter)
+        unfold2D = RooUnfoldBayes(self._response2D,
+                                  self._hJtMeas2D,
+                                  self._Niter)
         self._hJtReco2D = make2DHist(
             unfold2D.Hreco(), xbins=self._LogBinsJt, ybins=self._jetBinBorders
         )
@@ -793,18 +791,31 @@ class JtUnfolder(object):
         )
 
     # TODO
-    def writeFiles(self, file):
+    def writeFiles(self, filename):
         print("{}: write results to file".format("JtUnfolder"))
-        self._hJetPtMeas.Write()
+        if self._IsData:
+            folder = "data/BayesSubUnfolding/JetConeJtWeightBin"
+        else:
+            folder = "ToyMC/BayesSubUnfolding/JetConeJtWeightBin"
+
+        with root_open(filename, "recreate") as output_file:
+            TDir = output_file.mkdir(folder,title="JetConeJtWeightBin", recurse=True)
+            TDir.cd()
+            # output_file.cd(TDir)
+            for i, (jt, pt) in enumerate(zip(self._hJtMeasBin, self._jetPtBins)):
+                jt.name = "JetConeJtWeightBinNFin{0[NFin]:02d}JetPt{0[pT]:02d}".format(
+                    {"NFin": self._NFin, "pT": i}
+                )
+                jt.Write()
+
 
 
 def main():
+    randomSeed = 1234
     if len(sys.argv) > 1:
         numberEvents = int(sys.argv[1])
         if len(sys.argv) > 2:
             randomSeed = int(sys.argv[2])
-        else:
-            randomSeed = 123
     else:
         numberEvents = 5000
     rootFile = "legotrain_350_20161117-2106_LHCb4_fix_CF_pPb_MC_ptHardMerged.root"
@@ -812,20 +823,19 @@ def main():
     rootFile = "legotrain_512_20180523-2331_LHCb4_fix_CF_pPb_MC_ptHardMerged.root"
     unfolderToy = JtUnfolder("ToyMC", NBINSJt=32, NBINS=64, randomSeed=randomSeed)
     unfolderToy.createToyTraining(rootFile, numberEvents)
-    unfolderToy.createToyData(rootFile, numberEvents / 2)
+    unfolderToy.createToyData(rootFile, numberEvents // 2)
     unfolderToy.unfold()
-    if numberEvents >= 1000:
-        if numberEvents >= 1000000:
-            eString = "{}M_events".format(numberEvents / 1000000)
-        else:
-            eString = "{}k_events".format(numberEvents / 1000)
-    else:
-        eString = "{}_events".format(numberEvents)
-    unfolderToy.plotLeadingJtComparison("ToyMCLeadingJtTest_{}".format(eString))
-    return
-    unfolderToy.plotResponse()
-    unfolderToy.plotJetPt()
-    unfolderToy.plotJt("ToyMCUnfolder_{}".format(eString))
+    unfolderToy.writeFiles("output.root")
+    # if numberEvents >= 1000000:
+    #     eString = "{}M_events".format(numberEvents / 1000000)
+    # elif numberEvents >= 1000:
+    #     eString = "{}k_events".format(numberEvents / 1000)
+    # else:
+    #    eString = "{}_events".format(numberEvents)
+    # unfolderToy.plotLeadingJtComparison("ToyMCLeadingJtTest_{}".format(eString))
+    # unfolderToy.plotResponse()
+    # unfolderToy.plotJetPt()
+    # unfolderToy.plotJt("ToyMCUnfolder_{}".format(eString))
 
 
 if __name__ == "__main__":
