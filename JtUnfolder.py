@@ -27,7 +27,7 @@ from ROOT import RooUnfoldResponse
 class JtUnfolder(object):
     def __init__(self, name, **kwargs):
         self._name = name
-        print("Create Unfolder")
+        print("Create Unfolder {}".format(name))
         self._Njets = kwargs.get("Njets", 0)
         self._fEff = None
         self._jetBinBorders = kwargs.get("jetBinBorders", None)
@@ -815,20 +815,19 @@ class JtUnfolder(object):
             ]
         )
 
-    def writeFiles(self, filename, **kwargs):
+    def write_files(self, filename, **kwargs):
         """
         Write output histograms to file
 
         Args:
         filename: Name of output file
         """
-        print("{}: write results to file".format("JtUnfolder"))
-        base_folder = "{}/BayesSubUnfolding".format(self._name)
+        print("{}: write results to file {} and folder".format(self._name, filename))
+        base_folder = "{}/BayesSubUnfolding/".format(self._name)
+        print(base_folder)
 
-        if kwargs.get("append", False):
-            open_as = "append"
-        else:
-            open_as = "recreate"
+        open_as = "append" if kwargs.get("append", False) else "recreate"
+
         with root_open(filename, open_as) as output_file:
             TDir = output_file.mkdir("{}{}".format(base_folder, "JetConeJtWeightBin"),
                                      title="JetConeJtWeightBin", recurse=True)
@@ -868,7 +867,7 @@ def main():
     unfolderToy.createToyTraining(rootFile, numberEvents)
     unfolderToy.createToyData(rootFile, numberEvents // 2)
     unfolderToy.unfold()
-    unfolderToy.writeFiles("output.root")
+    unfolderToy.write_files("output.root")
     # if numberEvents >= 1000000:
     #     eString = "{}M_events".format(numberEvents / 1000000)
     # elif numberEvents >= 1000:
