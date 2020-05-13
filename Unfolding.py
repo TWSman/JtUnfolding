@@ -1,8 +1,9 @@
 from defs import createResponseInverse
-from os.path import splitext
+from os.path import splitext, split
 from rootpy.io import root_open
 from rootpy.plotting import Hist
 import JtUnfolder
+import os
 import sys
 
 
@@ -207,13 +208,17 @@ def main():
         return
 
     if f_data:
-        split_file = splitext(filename_data)
+        split_file = splitext(split(filename_data)[1])
         suffix = "_unfolded"
         if do_mb:
             suffix += "_MB"
         if do_triggered:
             suffix += "_triggered"
-        output_file = split_file[0] + suffix + split_file[1]
+        output_file = "output/" + split_file[0] + suffix + split_file[1]
+
+        if not os.path.exists('output'):
+            os.makedirs('output')
+
         if do_mb:
             MBDataJtUnfolder = JtUnfolder.JtUnfolder(
                 "MBDataUnfolder",
