@@ -178,6 +178,15 @@ def makeResponseFromTuple(Ntuple, meas, true):
     return response2D
 
 
+def normalize(histos, numbers):
+    normalized = []
+    for h, N in zip(histos, numbers):
+        h2 = h.clone()
+        h2.scale(1.0/N, "width")
+        normalized.append(h2)
+    return normalized
+
+
 def createResponseInverse(hMeas, hResponse):
     response = RooUnfoldResponse(hMeas, hMeas)
     for ibx in range(1, hResponse.GetNbinsX() + 1):

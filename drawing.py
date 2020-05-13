@@ -491,19 +491,20 @@ def draw8grid(
 
 
 def draw8gridcomparison(
-    measJt,
-    trueJt,
-    jetPt,
-    xlog=True,
-    ylog=True,
-    name="newfile.pdf",
-    proj=None,
-    unf2d=None,
-    unf=None,
-    fake=None,
-    unf2dtest=None,
-    leadingJt=None,
-    **kwargs
+        measJt,
+        trueJt,
+        jetPt,
+        xlog=True,
+        ylog=True,
+        name="newfile.pdf",
+        proj=None,
+        unf2d=None,
+        unf=None,
+        fake=None,
+        unf2dtest=None,
+        leadingJt=None,
+        backgroundJt=None,
+        **kwargs
 ):
     """Create an 4 by 2 grid of subfigures with shared axes and plots jT with
     background in jet pT bins
@@ -551,7 +552,7 @@ def draw8gridcomparison(
     else:
         divider = measJt
     ratios = []
-    for hists in (measJt, proj, unf2d, unf2dtest, unf, fake, leadingJt):
+    for hists in (measJt, proj, unf2d, unf2dtest, unf, fake, leadingJt, backgroundJt):
         if hists is not None:
             ratio = []
             for h, true in zip(hists, divider):
@@ -577,8 +578,8 @@ def draw8gridcomparison(
             )
         # rplt.errorbar(true,xerr=False,emptybins=False,axes=ax,label='True jT',fmt='go')
         for h, color, title in zip(
-            (trueJt, proj, unf2d, unf2dtest, unf, fake, leadingJt),
-            ("red", 1, 3, 8, 6, 7, 9),
+            (trueJt, proj, unf2d, unf2dtest, unf, fake, leadingJt, backgroundJt),
+            ("red", 1, 3, 8, 6, 7, 9, 4),
             (
                 "True jT",
                 "Projected Meas",
@@ -587,6 +588,7 @@ def draw8gridcomparison(
                 "1D unfolded",
                 "Fakes",
                 "Leading ref.",
+                "Background Jt"
             ),
         ):
             if h is not None:
@@ -621,7 +623,7 @@ def draw8gridcomparison(
 
     for ratio, color, title in zip(
         ratios,
-        ("blue", 1, 3, 8, 6, 7, 9),
+        ("blue", 1, 3, 8, 6, 7, 9, 4),
         (
             "Measured",
             "Projected Meas",
@@ -630,6 +632,7 @@ def draw8gridcomparison(
             "1D unfolded",
             "Fakes",
             "Leading ref.",
+            "Background Jt"
         ),
     ):
         if ratio is not None:

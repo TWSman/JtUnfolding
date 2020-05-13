@@ -7,6 +7,7 @@ from defs import (
     makeHist,
     scaleJet,
     unfoldJetPt,
+    normalize,
 )
 from ROOT import TF1
 from ROOT import TMath, TRandom3, TVector3
@@ -46,6 +47,9 @@ class JtUnfolder(object):
         self._hJtTrue2D = None
         self._Niter = kwargs.get("Iterations", 4)
         self._NFin = kwargs.get("NFin", 0)
+        self._hBgJt = None
+        self._hBgJtNormalized = None
+        self._numberBackgroundBin = None
 
     def fill_jt_histogram(self, histo, jt, pt):
         if self._weight:
@@ -109,6 +113,20 @@ class JtUnfolder(object):
 
     def setJetPtResponseHisto(self, hresponse):
         self._hresponseJetPt = hresponse
+
+    def setJtBackground(self, background):
+        self._hBgJt = background
+        if self._numberBackgroundBin is not None:
+            self._hBgJtNormalized = normalize(
+                self._hBgJt, self._numberBackgroundBin)
+            print("Jt background normalized")
+
+    def setJtBackgroundNumbers(self, n):
+        self._numberBackgroundBin = n
+        if self._hBgJt is not None:
+            self._hBgJtNormalized = normalize(
+                self._hBgJt, self._numberBackgroundBin)
+            print("Jt background normalized")
 
     def setJetPtResponseCoarseHisto(self, hresponse):
         self._hresponseJetPtCoarse = hresponse
@@ -569,14 +587,14 @@ class JtUnfolder(object):
             )
             for i in range(1, len(self._jetBinBorders))
         ]
-        self._hJtTestMeasBin = [
-            makeHist(
-                self._hJtTestMeas2D.ProjectionX("histTestMeas{}".format(i), i, i),
-                bins=self._LogBinsJt,
-            )
-            for i in range(1, len(self._jetBinBorders))
-        ]
         if not self._IsData:
+            self._hJtTestMeasBin = [
+                makeHist(
+                    self._hJtTestMeas2D.ProjectionX("histTestMeas{}".format(i), i, i),
+                    bins=self._LogBinsJt,
+                )
+                for i in range(1, len(self._jetBinBorders))
+            ]
             self._hJtTrueBin = [
                 makeHist(
                     self._hJtTrue2D.ProjectionX("histMeas{}".format(i), i, i),
@@ -598,27 +616,27 @@ class JtUnfolder(object):
             )
             for i in range(1, len(self._jetBinBorders))
         ]
-        for h, h2, n, n2 in zip(
+        for h, n, in zip(
             self._hJtMeasBin,
-            self._hJtTestMeasBin,
             self._numberJetsMeasFromHist,
-            self._numberJetsTestMeasBin,
         ):
             if n > 0:
                 h.Scale(1.0 / n, "width")
-            if n2 > 0:
-                h2.Scale(1.0 / n2, "width")
         if not self._IsData:
-            for h, h2, n, n2 in zip(
+            for h, h2, h3, n, n2, n3 in zip(
                 self._hJtTrueBin,
                 self._hJtTestTrueBin,
+                self._hJtTestMeasBin,
                 self._numberJetsTrueFromHist,
                 self._numberJetsTestTrueBin,
+                self._numberJetsTestMeasBin,
             ):
                 if n > 0:
                     h.Scale(1.0 / n, "width")
                 if n2 > 0:
                     h2.Scale(1.0 / n2, "width")
+                if n3 > 0:
+                    h3.Scale(1.0 / n3, "width")
         for h, n in zip(self._hJtRecoBin, self._numberJetsFromReco):
             if n > 0:
                 h.Scale(1.0 / n, "width")
@@ -656,6 +674,11 @@ class JtUnfolder(object):
         histlist = [self._hJtMeasBin, self._hJtRecoBin, self._hJtFakeProjBin]
         if not self._IsData:
             histlist.append(self._hJtTrueBin)
+        if self._hBgJtNormalized is not None:
+            histlist.append(self._hBgJtNormalized)
+            bg = self._hBgJtNormalized
+        else:
+            bg = None
         if nRebin > 0:
             for hists in histlist:
                 for h in hists:
@@ -672,6 +695,7 @@ class JtUnfolder(object):
                 unf2d=self._hJtRecoBin,
                 start=4,
                 stride=1,
+                backgroundJt=bg,
             )
             drawing.draw8gridcomparison(
                 self._hJtMeasBin,
@@ -683,6 +707,7 @@ class JtUnfolder(object):
                 unf2d=self._hJtRecoBin,
                 start=0,
                 stride=1,
+                backgroundJt=bg,
             )
         else:
             drawing.draw8gridcomparison(
@@ -790,24 +815,41 @@ class JtUnfolder(object):
             ]
         )
 
-    # TODO
     def writeFiles(self, filename):
+        """
+        Write output histograms to file
+
+        Args:
+        filename: Name of output file
+        """
         print("{}: write results to file".format("JtUnfolder"))
         if self._IsData:
-            folder = "data/BayesSubUnfolding/JetConeJtWeightBin"
+            base_folder = "data/BayesSubUnfolding/"
         else:
-            folder = "ToyMC/BayesSubUnfolding/JetConeJtWeightBin"
+            base_folder = "ToyMC/BayesSubUnfolding/"
 
         with root_open(filename, "recreate") as output_file:
-            TDir = output_file.mkdir(folder,title="JetConeJtWeightBin", recurse=True)
+            TDir = output_file.mkdir("{}{}".format(base_folder, "JetConeJtWeightBin"),
+                                     title="JetConeJtWeightBin", recurse=True)
             TDir.cd()
             # output_file.cd(TDir)
             for i, (jt, pt) in enumerate(zip(self._hJtMeasBin, self._jetPtBins)):
                 jt.name = "JetConeJtWeightBinNFin{0[NFin]:02d}JetPt{0[pT]:02d}".format(
                     {"NFin": self._NFin, "pT": i}
                 )
+                jt.title = "Finder:Full_Jets_R04_00 p_{{T,jet}} : {} - {}".format(pt[0], pt[1])
                 jt.Write()
 
+            if self._hBgJtNormalized is not None:
+                TDir = output_file.mkdir("{}{}".format(base_folder, "BgJtWeightBin"),
+                                         title="BgJtWeightBin", recurse=True)
+                TDir.cd()
+                for i, (jt, pt) in enumerate(zip(self._hBgJtNormalized,
+                                                 self._jetPtBins)):
+                    jt.name = "BgJtWeightBinNFin{0[NFin]:02d}JetPt{0[pT]:02d}".format(
+                        {"NFin": self._NFin, "pT": i}
+                    )
+                    jt.Write()
 
 
 def main():
