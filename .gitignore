@@ -16,3 +16,4 @@ tuple.root
 temp.txt
 *.pdf
 *.root
+__pycache__
