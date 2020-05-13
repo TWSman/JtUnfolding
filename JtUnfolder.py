@@ -815,7 +815,7 @@ class JtUnfolder(object):
             ]
         )
 
-    def writeFiles(self, filename):
+    def writeFiles(self, filename, **kwargs):
         """
         Write output histograms to file
 
@@ -823,12 +823,13 @@ class JtUnfolder(object):
         filename: Name of output file
         """
         print("{}: write results to file".format("JtUnfolder"))
-        if self._IsData:
-            base_folder = "data/BayesSubUnfolding/"
-        else:
-            base_folder = "ToyMC/BayesSubUnfolding/"
+        base_folder = "{}/BayesSubUnfolding".format(self._name)
 
-        with root_open(filename, "recreate") as output_file:
+        if kwargs.get("append", False):
+            open_as = "append"
+        else:
+            open_as = "recreate"
+        with root_open(filename, open_as) as output_file:
             TDir = output_file.mkdir("{}{}".format(base_folder, "JetConeJtWeightBin"),
                                      title="JetConeJtWeightBin", recurse=True)
             TDir.cd()

@@ -1,4 +1,5 @@
 from defs import createResponseInverse
+from os.path import splitext
 from rootpy.io import root_open
 from rootpy.plotting import Hist
 import JtUnfolder
