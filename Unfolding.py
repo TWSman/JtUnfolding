@@ -9,10 +9,8 @@ import sys
 def get_hists(in_file, base_folder, histname, iFinder, Njets=0):
     if Njets == 0:
         return in_file.Get(
-                "{}/{}/{}NFin{:02d}".format(
-                    base_folder, histname, histname, iFinder
-                )
-            )
+            "{}/{}/{}NFin{:02d}".format(base_folder, histname, histname, iFinder)
+        )
     else:
         return [
             in_file.Get(
@@ -25,16 +23,13 @@ def get_hists(in_file, base_folder, histname, iFinder, Njets=0):
 
 
 def get_numbers(in_file, base_folder, histname, iFinder, Njets):
-    return [x.Integral() for x in get_hists(in_file,
-                                            base_folder,
-                                            histname,
-                                            iFinder,
-                                            Njets)]
+    return [
+        x.Integral() for x in get_hists(in_file, base_folder, histname, iFinder, Njets)
+    ]
 
 
 def main():
     print("Number of arguments: ", len(sys.argv), "arguments.")
-    print("Argument list:", str(sys.argv))
     filename = sys.argv[1]
     print("Input file: {}".format(filename))
 
